@@ -6,7 +6,7 @@ import { toast } from 'react-toastify';
 import {
   Calendar, User, Hash, ChevronDown, Check, Loader2, ExternalLink,
   Copy, Eye, FileText, Mail, Share2, MessageCircle, X,
-  ShieldAlert, ArrowLeft, Lock, Award, Zap, FileSpreadsheet, Upload, RotateCcw, AlertCircle, Code
+  ShieldAlert, ArrowLeft, Lock, Award, Zap, FileSpreadsheet, Upload, RotateCcw, AlertCircle, Code, PartyPopper
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useOutletContext, Link } from 'react-router-dom';
@@ -1009,7 +1009,79 @@ const IssueCertificate = () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </div >
+
+      {/* Bulk Completion Success Summary Modal */}
+      <AnimatePresence>
+        {bulkStatus === 'completed' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              className="glass-card w-full max-w-lg p-10 rounded-[40px] text-center border border-primary/30 shadow-2xl shadow-primary/10"
+            >
+              <div className="relative mb-8">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: [0, 1.2, 1] }}
+                  transition={{ duration: 0.5, times: [0, 0.7, 1] }}
+                  className="w-24 h-24 bg-primary/20 rounded-[32px] flex items-center justify-center mx-auto"
+                >
+                  <PartyPopper className="text-primary" size={48} />
+                </motion.div>
+
+                {/* Micro-celebration elements */}
+                {[...Array(6)].map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className="absolute top-1/2 left-1/2 w-2 h-2 rounded-full bg-primary"
+                    initial={{ opacity: 0 }}
+                    animate={{
+                      opacity: [0, 1, 0],
+                      x: [0, (i % 2 === 0 ? 1 : -1) * (40 + i * 10)],
+                      y: [0, (i < 3 ? -1 : 1) * (40 + i * 10)]
+                    }}
+                    transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                  />
+                ))}
+              </div>
+
+              <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Mission Accomplished!</h2>
+              <p className="text-secondary text-sm mb-8">All certificates have been successfully minted and stored on the blockchain.</p>
+
+              <div className="grid grid-cols-2 gap-4 mb-10">
+                <div className="bg-white/5 p-5 rounded-2xl border border-white/5">
+                  <p className="text-[10px] text-secondary uppercase font-bold tracking-widest mb-1">Processed</p>
+                  <p className="text-2xl font-black text-white">{bulkResults.length}</p>
+                </div>
+                <div className="bg-white/5 p-5 rounded-2xl border border-white/5">
+                  <p className="text-[10px] text-secondary uppercase font-bold tracking-widest mb-1">Successful</p>
+                  <p className="text-2xl font-black text-green-400">{bulkResults.filter(r => r.success).length}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    setBulkStatus('idle');
+                    setBulkData([]);
+                    setBulkResults([]);
+                  }}
+                  className="w-full py-4 bg-primary hover:bg-blue-600 text-white font-bold rounded-2xl shadow-lg shadow-blue-500/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <Check size={18} /> Done & Finish Batch
+                </button>
+                <p className="text-[10px] text-gray-400 italic">Emails have been sent to all recipients automatically.</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
