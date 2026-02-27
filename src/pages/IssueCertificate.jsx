@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { BrowserProvider, Contract } from 'ethers';
+import { BrowserProvider, Contract, getAddress } from 'ethers';
 import { abi } from '../scdata/Cert.json';
 import { CertModuleCert } from '../scdata/deployed_addresses.json';
 import { toast } from 'react-toastify';
 import {
   Calendar, User, Hash, ChevronDown, Check, Loader2, ExternalLink,
   Copy, Eye, FileText, Mail, Share2, MessageCircle, X,
-  ShieldAlert, ArrowLeft, Lock, Award, Zap, FileSpreadsheet, Upload, RotateCcw, AlertCircle
+  ShieldAlert, ArrowLeft, Lock, Award, Zap, FileSpreadsheet, Upload, RotateCcw, AlertCircle, Code
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useOutletContext, Link } from 'react-router-dom';
@@ -22,25 +22,6 @@ const IssueCertificate = () => {
     emailjs.init("RDdze55nFmv0HKhwk");
   }, []);
 
-  if (!isAdmin) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-        <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mb-6 border border-red-500/20">
-          <Lock className="text-red-500" size={32} />
-        </div>
-        <h2 className="text-3xl font-bold mb-3">Access Denied</h2>
-        <p className="text-gray-400 max-w-md mb-8">
-          This wallet ({account?.slice(0, 6)}...{account?.slice(-4)}) is not authorized to issue certificates. Please switch to the Admin Wallet in MetaMask.
-        </p>
-        <Link
-          to="/dashboard"
-          className="px-8 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold transition-all border border-white/10 flex items-center"
-        >
-          <ArrowLeft size={18} className="mr-2" /> Return to Dashboard
-        </Link>
-      </div>
-    );
-  }
 
   const [formData, setFormData] = useState({
     id: '',
@@ -65,6 +46,8 @@ const IssueCertificate = () => {
 
   // Bulk Mode States
   const [issueMode, setIssueMode] = useState('single'); // single, bulk
+  const [bulkTab, setBulkTab] = useState('excel'); // excel, json
+  const [jsonText, setJsonText] = useState('');
   const [bulkData, setBulkData] = useState([]);
   const [bulkStatus, setBulkStatus] = useState('idle'); // idle, processing, completed
   const [currentBulkIndex, setCurrentBulkIndex] = useState(-1);
@@ -162,13 +145,27 @@ const IssueCertificate = () => {
       data.attendance || 0
     ].join(',');
 
+    let studentAddr;
+    try {
+      // Force to lowercase first. This makes ethers ignore any existing (potentially wrong) checksum 
+      // and generate the correct one for us.
+      const rawAddr = data.studentAddress.trim().toLowerCase();
+      if (!rawAddr.startsWith('0x')) {
+        studentAddr = getAddress('0x' + rawAddr);
+      } else {
+        studentAddr = getAddress(rawAddr);
+      }
+    } catch (e) {
+      throw new Error(`Invalid Ethereum address format: ${data.studentAddress}`);
+    }
+
     const tx = await instance.issue(
       data.id,
       data.name,
       data.course,
       data.grade,
       data.date,
-      data.studentAddress,
+      studentAddr,
       performanceStr
     );
 
@@ -198,6 +195,66 @@ const IssueCertificate = () => {
     return tx.hash;
   };
 
+  const normalizeStudentData = (rawData) => {
+    return rawData.map(row => {
+      const newRow = {
+        course: "Certified Blockchain Associate",
+        grade: "A",
+        date: new Date().toISOString().split('T')[0],
+        theory: 0, practical: 0, project: 0, assignment: 0, attendance: 0
+      };
+
+      Object.keys(row).forEach(key => {
+        const lowKey = key.toLowerCase().trim();
+        const value = row[key];
+        if (value === undefined || value === null) return;
+
+        const valStr = value.toString().trim();
+
+        if (lowKey === 'id' || lowKey.includes('id') || lowKey === 'no') {
+          newRow.id = valStr.replace(/\D/g, '');
+        }
+        else if (lowKey.includes('name')) newRow.name = valStr;
+        else if (lowKey.includes('email')) newRow.email = valStr;
+        else if (lowKey.includes('course') || lowKey.includes('sub')) newRow.course = valStr;
+        else if (lowKey.includes('grade')) newRow.grade = valStr;
+        else if (lowKey.includes('date')) newRow.date = valStr;
+        else if (lowKey.includes('addr') || lowKey.includes('wallet') || lowKey.includes('eth') || lowKey === 'to') {
+          // Remove all whitespace and hidden characters
+          let cleanAddr = valStr.replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+          // Ensure 0x prefix
+          if (cleanAddr && !cleanAddr.startsWith('0x')) {
+            cleanAddr = '0x' + cleanAddr;
+          }
+          newRow.studentAddress = cleanAddr;
+        }
+        else if (lowKey.includes('theo')) newRow.theory = parseInt(valStr) || 0;
+        else if (lowKey.includes('prac')) newRow.practical = parseInt(valStr) || 0;
+        else if (lowKey.includes('proj')) newRow.project = parseInt(valStr) || 0;
+        else if (lowKey.includes('assign') || lowKey.includes('asgn')) newRow.assignment = parseInt(valStr) || 0;
+        else if (lowKey.includes('atten')) newRow.attendance = parseInt(valStr) || 0;
+      });
+      return newRow;
+    });
+  };
+
+  const validateStudentData = (data) => {
+    if (!data || data.length === 0) return "No data found";
+    for (let i = 0; i < data.length; i++) {
+      const s = data[i];
+      if (!s.id) return `Row ${i + 1}: Missing Certificate ID`;
+      if (!s.name) return `Row ${i + 1}: Missing Student Name`;
+      if (!s.studentAddress) return `Row ${i + 1}: Missing Wallet Address`;
+
+      // Basic address format check
+      const addr = s.studentAddress;
+      if (!addr || !addr.match(/^0x[a-fA-F0-9]{40}$/)) {
+        return `Row ${i + 1}: Invalid Address (${addr ? addr.length : 0} chars). Must be 0x followed by 40 hex characters.`;
+      }
+    }
+    return null;
+  };
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -209,30 +266,75 @@ const IssueCertificate = () => {
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws);
+        const rawData = XLSX.utils.sheet_to_json(ws);
 
-        if (data.length === 0) {
+        if (rawData.length === 0) {
           toast.error('Excel file is empty');
           return;
         }
 
-        // Basic validation of columns
-        const required = ['id', 'name', 'email', 'course', 'grade', 'date', 'studentAddress'];
-        const headers = Object.keys(data[0] || {});
-        const missing = required.filter(h => !headers.includes(h));
+        const normalizedData = normalizeStudentData(rawData);
+        const error = validateStudentData(normalizedData);
 
-        if (missing.length > 0) {
-          toast.error(`Missing columns: ${missing.join(', ')}`);
+        if (error) {
+          toast.error(error);
           return;
         }
 
-        setBulkData(data);
-        toast.success(`Loaded ${data.length} records!`);
+        setBulkData(normalizedData);
+        toast.success(`Loaded ${normalizedData.length} records!`);
       } catch (err) {
+        console.error(err);
         toast.error('Failed to parse Excel file');
       }
     };
     reader.readAsBinaryString(file);
+  };
+
+  const processBulk = async () => {
+    if (bulkData.length === 0) {
+      toast.warning("No data to process");
+      return;
+    }
+
+    setBulkStatus('processing');
+    const results = [];
+
+    for (let i = 0; i < bulkData.length; i++) {
+      setCurrentBulkIndex(i);
+      const student = bulkData[i];
+
+      try {
+        // Pre-flight check
+        if (!student.id || !student.name || !student.studentAddress) {
+          throw new Error(`Critical data missing (ID, Name, or Address) for row ${i + 1}`);
+        }
+
+        const hash = await issueSingleCertificate(student);
+        results.push({ index: i, success: true, hash, id: student.id });
+        toast.success(`Success: ${student.id} (${i + 1}/${bulkData.length})`);
+
+        // Add a small 1-second breather to avoid RPC/MetaMask issues
+        if (i < bulkData.length - 1) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } catch (err) {
+        console.error(`Error at index ${i}:`, err);
+        const errorMsg = err.reason || err.message || "Unknown error";
+        results.push({ index: i, success: false, error: errorMsg, id: student.id || `Row ${i + 1}` });
+
+        if (errorMsg.includes("user rejected")) {
+          toast.error("Batch Cancelled: User rejected transaction");
+        } else {
+          toast.error(`Batch Stopped: ${errorMsg}`);
+        }
+        break; // Stop loop on failure to prevent nonce mess
+      }
+      setBulkResults([...results]);
+    }
+
+    setBulkStatus('completed');
+    setCurrentBulkIndex(-1);
   };
 
   const downloadTemplate = () => {
@@ -258,30 +360,56 @@ const IssueCertificate = () => {
     XLSX.writeFile(wb, "Mass_Certificate_Template.xlsx");
   };
 
-  const processBulk = async () => {
-    if (bulkData.length === 0) return;
-
-    setBulkStatus('processing');
-    const results = [];
-
-    for (let i = 0; i < bulkData.length; i++) {
-      setCurrentBulkIndex(i);
-      try {
-        const hash = await issueSingleCertificate(bulkData[i]);
-        results.push({ index: i, success: true, hash, id: bulkData[i].id });
-        toast.success(`Issued ${bulkData[i].id} (${i + 1}/${bulkData.length})`);
-      } catch (err) {
-        console.error(`Error at index ${i}:`, err);
-        results.push({ index: i, success: false, error: err.message, id: bulkData[i].id });
-        toast.error(`Failed ${bulkData[i].id}: ${err.message}`);
+  const handleJsonPaste = (text) => {
+    try {
+      if (!text.trim()) {
+        setBulkData([]);
+        toast.info("Input cleared");
+        return;
       }
-      setBulkResults([...results]);
-    }
+      const rawData = JSON.parse(text);
+      const dataArray = Array.isArray(rawData) ? rawData : [rawData];
 
-    setBulkStatus('completed');
-    setCurrentBulkIndex(-1);
-    toast.info('Mass generation complete!');
+      const normalizedData = normalizeStudentData(dataArray);
+      const error = validateStudentData(normalizedData);
+
+      if (error) {
+        toast.error(`Validation Failed: ${error}`);
+        return;
+      }
+
+      setBulkData(normalizedData);
+      toast.success(`Loaded ${normalizedData.length} records! Scroll down to start.`);
+    } catch (err) {
+      toast.error(`JSON Parse Error: Ensure your JSON formatting is correct (check commas/brackets).`);
+    }
   };
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 w-full">
+        <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mb-6 border border-red-500/20">
+          <Lock className="text-red-500" size={32} />
+        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <h2 className="text-3xl font-bold mb-3 text-white">Access Denied</h2>
+          <p className="text-gray-400 max-w-md mb-8 mx-auto">
+            This wallet ({account?.slice(0, 6)}...{account?.slice(-4)}) is not authorized to issue certificates.
+            <br /><span className="text-primary text-sm">Please switch to the Admin Wallet in MetaMask.</span>
+          </p>
+          <Link
+            to="/dashboard"
+            className="px-8 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold transition-all border border-white/10 flex items-center w-fit mx-auto text-white"
+          >
+            <ArrowLeft size={18} className="mr-2" /> Return to Dashboard
+          </Link>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-100px)] py-8 px-4">
@@ -641,32 +769,74 @@ const IssueCertificate = () => {
 
               {bulkStatus === 'idle' ? (
                 <div className="space-y-6">
-                  {/* Upload Area */}
-                  <div className="relative group cursor-pointer">
-                    <input
-                      type="file"
-                      accept=".xlsx, .xls"
-                      onChange={handleFileUpload}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
-                    <div className="border-2 border-dashed border-white/10 group-hover:border-primary/50 group-hover:bg-primary/5 rounded-[24px] p-8 transition-all flex flex-col items-center justify-center text-center">
-                      <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                        <Upload className="text-secondary group-hover:text-primary" size={32} />
-                      </div>
-                      <h3 className="text-white font-bold mb-1">Click to Upload Excel</h3>
-                      <p className="text-secondary text-xs">Drop your .xlsx file here</p>
-                    </div>
+                  {/* Tab Switcher for Bulk Methods */}
+                  <div className="flex p-1 bg-white/5 rounded-xl border border-white/10">
+                    <button
+                      onClick={() => setBulkTab('excel')}
+                      className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${bulkTab === 'excel' ? 'bg-white/10 text-white' : 'text-secondary hover:text-white'}`}
+                    >
+                      Excel File
+                    </button>
+                    <button
+                      onClick={() => setBulkTab('json')}
+                      className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${bulkTab === 'json' ? 'bg-white/10 text-white' : 'text-secondary hover:text-white'}`}
+                    >
+                      JSON Paste
+                    </button>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex flex-col gap-3">
-                    <button
-                      onClick={downloadTemplate}
-                      className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2"
-                    >
-                      <FileSpreadsheet size={18} /> Download Excel Template
-                    </button>
+                  {bulkTab === 'excel' ? (
+                    <>
+                      {/* Upload Area */}
+                      <div className="relative group cursor-pointer">
+                        <input
+                          type="file"
+                          accept=".xlsx, .xls"
+                          onChange={handleFileUpload}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                        <div className="border-2 border-dashed border-white/10 group-hover:border-primary/50 group-hover:bg-primary/5 rounded-[24px] p-8 transition-all flex flex-col items-center justify-center text-center">
+                          <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                            <Upload className="text-secondary group-hover:text-primary" size={32} />
+                          </div>
+                          <h3 className="text-white font-bold mb-1 text-sm">Click to Upload Excel</h3>
+                          <p className="text-secondary text-[10px]">Drop your .xlsx file here</p>
+                        </div>
+                      </div>
 
+                      <button
+                        onClick={downloadTemplate}
+                        className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-bold text-xs transition-all flex items-center justify-center gap-2"
+                      >
+                        <FileSpreadsheet size={14} /> Download Excel Template
+                      </button>
+                    </>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="relative">
+                        <textarea
+                          placeholder='Paste JSON array here... e.g. [{"id":"1","name":"User",...}]'
+                          className="w-full h-48 bg-black/40 border border-white/10 rounded-2xl p-4 text-[10px] font-mono focus:border-primary/50 outline-none transition-all resize-none custom-scrollbar"
+                          value={jsonText}
+                          onChange={(e) => setJsonText(e.target.value)}
+                        />
+                        <div className="absolute top-3 right-3">
+                          <Code size={14} className="text-secondary opacity-50" />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleJsonPaste(jsonText)}
+                        className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-bold text-xs transition-all flex items-center justify-center gap-2"
+                      >
+                        <Check size={14} /> Parse & Load Data
+                      </button>
+                      <p className="text-[9px] text-secondary px-2 italic text-center">
+                        Ensure your JSON is a valid array of objects.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3">
                     {bulkData.length > 0 && (
                       <div className="mt-4 p-4 bg-primary/10 border border-primary/20 rounded-2xl">
                         <div className="flex items-center justify-between mb-4">
