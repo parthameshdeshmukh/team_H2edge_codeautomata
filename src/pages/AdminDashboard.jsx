@@ -132,13 +132,7 @@ const AdminDashboard = () => {
                     </button>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Link
-                        to="/student"
-                        className="flex items-center px-6 py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl transition-all duration-200 active:scale-95 font-semibold"
-                    >
-                        <Globe size={18} className="mr-2 text-blue-400" />
-                        My Student View
-                    </Link>
+
                     <Link
                         to="/issuecertificate"
                         className="flex items-center px-6 py-3 bg-primary hover:bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/20 transition-all duration-200 active:scale-95 font-semibold"

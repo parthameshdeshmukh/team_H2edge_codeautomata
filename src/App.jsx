@@ -8,7 +8,6 @@ import ViewCertificate from './pages/ViewCertificate';
 
 import AdminDashboard from './pages/AdminDashboard';
 import VerifyCertificate from './pages/VerifyCertificate';
-import StudentDashboard from './pages/StudentDashboard';
 
 function App() {
 
@@ -22,7 +21,6 @@ function App() {
       {/* App Dashboard Routes */}
       <Route element={<MainLayout />}>
         <Route path='/dashboard' element={<AdminDashboard />} />
-        <Route path='/student' element={<StudentDashboard />} />
         <Route path='/issuecertificate' element={<IssueCertificate />} />
         <Route path='/viewcertificate/:id' element={<ViewCertificate />} />
       </Route>

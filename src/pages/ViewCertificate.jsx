@@ -3,7 +3,7 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import { BrowserProvider, Contract } from 'ethers';
 import { abi } from '../scdata/Cert.json';
 import { CertModuleCert } from '../scdata/deployed_addresses.json';
-import { ArrowLeft, Share2, ShieldCheck, Loader2, ChevronRight, Linkedin, FileDown } from 'lucide-react';
+import { ArrowLeft, Share2, ShieldCheck, Loader2, ChevronRight, FileDown } from 'lucide-react';
 import Certificate from '../components/Certificate';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -74,42 +74,7 @@ const ViewCertificate = () => {
     }
   };
 
-  const shareToLinkedIn = () => {
-    const url = window.location.href;
-    const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
-    window.open(linkedInUrl, '_blank', 'width=600,height=600');
-  };
 
-  const addToLinkedInProfile = () => {
-    const baseUrl = 'https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME';
-
-    // Attempt to parse date for year and month
-    let issueYear = new Date().getFullYear();
-    let issueMonth = new Date().getMonth() + 1;
-
-    if (certificate?.date) {
-      try {
-        const d = new Date(certificate.date);
-        if (!isNaN(d.getTime())) {
-          issueYear = d.getFullYear();
-          issueMonth = d.getMonth() + 1;
-        }
-      } catch (e) {
-        console.error("Date parsing error", e);
-      }
-    }
-
-    const params = new URLSearchParams({
-      name: certificate?.course || 'Blockchain Certificate',
-      organizationName: 'CertDapp Blockchain Network',
-      issueYear: issueYear.toString(),
-      issueMonth: issueMonth.toString(),
-      certId: id,
-      certUrl: window.location.href,
-    });
-
-    window.open(`${baseUrl}&${params.toString()}`, '_blank');
-  };
 
   const downloadPDF = async () => {
     const element = document.getElementById('certificate-content');
@@ -227,26 +192,7 @@ const ViewCertificate = () => {
         </Link>
 
         <div className="flex flex-wrap justify-center items-center gap-3">
-          {/* LinkedIn Group */}
-          <div className="flex items-center gap-2 bg-white/5 p-1 rounded-2xl border border-white/5">
-            <button
-              onClick={addToLinkedInProfile}
-              className="flex items-center px-4 py-2.5 bg-[#0077b5] text-white rounded-xl hover:bg-[#006097] transition-all text-sm font-bold shadow-lg shadow-[#0077b5]/20 animate-pulse-subtle"
-            >
-              <Linkedin size={16} className="mr-2" />
-              Add to Profile
-            </button>
-            <button
-              onClick={shareToLinkedIn}
-              className="flex items-center px-4 py-2.5 bg-white/5 text-secondary hover:text-white rounded-xl hover:bg-white/10 transition-all text-sm font-bold"
-              title="Share as Post"
-            >
-              <Share2 size={16} className="mr-2" />
-              Post
-            </button>
-          </div>
 
-          <div className="h-8 w-[1px] bg-white/10 mx-1 hidden sm:block"></div>
 
           {/* Action Group */}
           <div className="flex items-center gap-2">

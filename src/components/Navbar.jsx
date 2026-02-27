@@ -20,12 +20,7 @@ const Navbar = () => {
       </Link>
 
       <div className="flex items-center space-x-6">
-        <Link
-          to="/student"
-          className="text-sm font-medium text-gray-400 hover:text-white transition-colors"
-        >
-          Student Board
-        </Link>
+
 
         <Link
           to="/verify"

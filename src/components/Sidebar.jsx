@@ -44,16 +44,6 @@ const Sidebar = ({ isAdmin }) => {
                         Student Access
                     </p>
                     <Link
-                        to="/student"
-                        className={`flex items-center px-4 py-3 rounded-2xl transition-all duration-300 group font-medium text-[14px] ${isActive('/student')
-                            ? 'bg-primary text-white shadow-lg shadow-blue-500/20'
-                            : 'text-gray-400 hover:bg-white/5 hover:text-white'
-                            }`}
-                    >
-                        <Wallet size={18} className={`mr-3 ${isActive('/student') ? 'text-white' : 'text-gray-500 group-hover:text-white'}`} />
-                        My Certificates
-                    </Link>
-                    <Link
                         to="/verify"
                         className={`flex items-center px-4 py-3 rounded-2xl transition-all duration-300 group font-medium text-[14px] ${isActive('/verify')
                             ? 'bg-primary text-white shadow-lg shadow-blue-500/20'
@@ -66,15 +56,7 @@ const Sidebar = ({ isAdmin }) => {
                 </div>
             </nav>
 
-            <div className="p-6 border-t border-white/5">
-                <Link
-                    to={isAdmin ? "/dashboard" : "/student"}
-                    className="block bg-white/5 border border-white/5 rounded-2xl p-4 text-center hover:bg-white/10 transition-all active:scale-95 cursor-pointer"
-                >
-                    <p className="text-sm font-semibold text-white">{isAdmin ? "Admin Portal" : "Student View"}</p>
-                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-tighter">{isAdmin ? "System Records" : "Personal Records"}</p>
-                </Link>
-            </div>
+
         </aside>
     );
 };

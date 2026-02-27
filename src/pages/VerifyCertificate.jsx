@@ -21,14 +21,22 @@ import {
     Eye,
     Upload,
     Camera,
-    Cpu
+    Cpu,
+    FileDown
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import Certificate from '../components/Certificate';
 import { abi } from '../scdata/Cert.json';
 import { CertModuleCert } from '../scdata/deployed_addresses.json';
 import { toast } from 'react-toastify';
 import { Html5Qrcode } from 'html5-qrcode';
 import AnimatedBackground from '../components/AnimatedBackground';
 import confetti from 'canvas-confetti';
+import * as pdfjs from 'pdfjs-dist';
+
+// Configure PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const VerifyCertificate = () => {
     const navigate = useNavigate();
@@ -41,9 +49,19 @@ const VerifyCertificate = () => {
     const [txHash, setTxHash] = useState('');
     const [isScanning, setIsScanning] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const qrScannerRef = useRef(null);
     const fileInputRef = useRef(null);
+
+    // Helper to extract numeric ID from QR text (handles URLs like https://site.com/view/101)
+    const extractId = (text) => {
+        if (!text) return '';
+        const segments = text.split('/');
+        const lastSegment = (segments.pop() || segments.pop()).trim();
+        // Keep only digits if the blockchain ID is numeric
+        return lastSegment.replace(/\D/g, '');
+    };
 
     // Cleanup scanner on unmount
     useEffect(() => {
@@ -74,9 +92,11 @@ const VerifyCertificate = () => {
         }, 250);
     };
 
-    const handleVerify = async (e) => {
+    const handleVerify = async (e, directId = null) => {
         if (e) e.preventDefault();
-        if (!certId.trim()) {
+        const activeId = directId || certId;
+
+        if (!activeId || !activeId.toString().trim()) {
             toast.error('Please enter a Certificate ID');
             return;
         }
@@ -109,7 +129,7 @@ const VerifyCertificate = () => {
             const instance = new Contract(CertModuleCert, abi, provider);
 
             // Fetch the result using BigInt for uint256
-            const blockchainResult = await instance.getFunction("Certificates")(BigInt(certId));
+            const blockchainResult = await instance.getFunction("Certificates")(BigInt(activeId));
 
             // Artificial delay to make it feel like a heavy security check
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -155,29 +175,62 @@ const VerifyCertificate = () => {
         setIsScanning(true);
         setTimeout(async () => {
             try {
+                if (qrScannerRef.current) {
+                    await qrScannerRef.current.stop().catch(() => { });
+                }
+
                 const html5QrCode = new Html5Qrcode("reader");
                 qrScannerRef.current = html5QrCode;
 
                 const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
-                await html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    (decodedText) => {
-                        setCertId(decodedText);
-                        stopScanner();
-                        setTimeout(() => {
-                            const btn = document.getElementById('verify-btn');
-                            if (btn) btn.click();
-                        }, 500);
+                // Get available cameras to find the integrated one
+                const devices = await Html5Qrcode.getCameras();
+
+                if (devices && devices.length > 0) {
+                    // Look for integrated camera, front camera, or just pick the first one
+                    let cameraId = devices[0].id;
+                    const integratedCamera = devices.find(d =>
+                        d.label.toLowerCase().includes('integrated') ||
+                        d.label.toLowerCase().includes('front') ||
+                        d.label.toLowerCase().includes('built-in') ||
+                        d.label.toLowerCase().includes('webcam')
+                    );
+
+                    if (integratedCamera) {
+                        cameraId = integratedCamera.id;
+                        console.log("Using integrated camera:", integratedCamera.label);
                     }
-                );
+
+                    await html5QrCode.start(
+                        cameraId,
+                        config,
+                        (decodedText) => {
+                            const extractedId = extractId(decodedText);
+                            setCertId(extractedId);
+                            stopScanner();
+                            handleVerify(null, extractedId);
+                        }
+                    );
+                } else {
+                    // Fallback to basic constraints if device list fails
+                    await html5QrCode.start(
+                        { facingMode: "user" },
+                        config,
+                        (decodedText) => {
+                            const extractedId = extractId(decodedText);
+                            setCertId(extractedId);
+                            stopScanner();
+                            handleVerify(null, extractedId);
+                        }
+                    );
+                }
             } catch (err) {
-                console.error("Error starting scanner:", err);
-                toast.error("Could not access camera");
+                console.error("Scanner start failure:", err);
+                toast.error("Could not start camera. Please ensure permissions are granted.");
                 setIsScanning(false);
             }
-        }, 300);
+        }, 500);
     };
 
     const stopScanner = async () => {
@@ -196,21 +249,47 @@ const VerifyCertificate = () => {
         const file = e.target.files[0];
         if (!file) return;
 
-        const html5QrCode = new Html5Qrcode("file-qr-reader");
-        const toastId = toast.loading("Processing image...");
+        const toastId = toast.loading(file.type === 'application/pdf' ? "Reading PDF..." : "Processing image...");
 
         try {
-            const decodedText = await html5QrCode.scanFile(file, true);
-            setCertId(decodedText);
+            let extractedText = '';
+            const html5QrCode = new Html5Qrcode("file-qr-reader");
+
+            if (file.type === 'application/pdf') {
+                // PDF processing: convert first page to canvas
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+                const page = await pdf.getPage(1);
+                const viewport = page.getViewport({ scale: 2.0 });
+
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                // Scan the canvas Blob
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                const imageFile = new File([blob], "temp.png", { type: "image/png" });
+                extractedText = await html5QrCode.scanFile(imageFile, true);
+            } else {
+                // Image processing
+                extractedText = await html5QrCode.scanFile(file, true);
+            }
+
+            const extractedId = extractId(extractedText);
+            setCertId(extractedId);
             toast.update(toastId, { render: "QR Code detected!", type: "success", isLoading: false, autoClose: 2000 });
 
-            // Auto-trigger verification
-            setTimeout(() => {
-                handleVerify();
-            }, 500);
+            // Trigger verification
+            handleVerify(null, extractedId);
         } catch (err) {
             console.error("File Scan Error:", err);
-            toast.update(toastId, { render: "No valid QR code found in image", type: "error", isLoading: false, autoClose: 3000 });
+            toast.update(toastId, { render: "No valid QR code found in file", type: "error", isLoading: false, autoClose: 3000 });
+        } finally {
+            // Clean up file input
+            if (e.target) e.target.value = '';
         }
     };
 
@@ -219,6 +298,50 @@ const VerifyCertificate = () => {
         setCopied(true);
         toast.success('Transaction Hash copied!');
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const downloadPDF = async () => {
+        const element = document.getElementById('certificate-content');
+        if (!element) return;
+
+        setIsDownloading(true);
+        const toastId = toast.loading("Generating high-quality PDF...");
+
+        try {
+            const canvas = await html2canvas(element, {
+                scale: 2, // Higher resolution
+                useCORS: true,
+                logging: false,
+                backgroundColor: "#ffffff"
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({
+                orientation: 'landscape',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+
+            pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+            pdf.save(`Certificate-${certId}-${certData.name.replace(/\s+/g, '-')}.pdf`);
+
+            toast.update(toastId, {
+                render: "Certificate Downloaded!",
+                type: "success",
+                isLoading: false,
+                autoClose: 3000
+            });
+        } catch (error) {
+            console.error("PDF Export Error:", error);
+            toast.update(toastId, {
+                render: "Download Failed",
+                type: "error",
+                isLoading: false,
+                autoClose: 3000
+            });
+        } finally {
+            setIsDownloading(false);
+        }
     };
 
     return (
@@ -394,7 +517,7 @@ const VerifyCertificate = () => {
                                     type="file"
                                     ref={fileInputRef}
                                     onChange={handleFileUpload}
-                                    accept="image/*"
+                                    accept="image/*,application/pdf"
                                     className="hidden"
                                 />
                             </div>
@@ -479,12 +602,29 @@ const VerifyCertificate = () => {
                                         </div>
                                     </motion.div>
 
-                                    <button
-                                        onClick={() => navigate(`/viewcertificate/${certId}`)}
-                                        className="w-full py-4 bg-white text-black rounded-2xl font-bold text-lg hover:bg-gray-200 transition-colors active:scale-[0.99]"
-                                    >
-                                        View Full Certificate
-                                    </button>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <button
+                                            onClick={() => navigate(`/viewcertificate/${certId}`)}
+                                            className="w-full py-4 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-2xl font-bold text-lg transition-all active:scale-[0.99] flex items-center justify-center space-x-2"
+                                        >
+                                            <Eye size={20} />
+                                            <span>View Full</span>
+                                        </button>
+                                        <button
+                                            onClick={downloadPDF}
+                                            disabled={isDownloading}
+                                            className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-lg shadow-xl shadow-blue-500/20 transition-all active:scale-[0.99] flex items-center justify-center space-x-2"
+                                        >
+                                            {isDownloading ? (
+                                                <Loader2 className="animate-spin" size={20} />
+                                            ) : (
+                                                <>
+                                                    <FileDown size={20} />
+                                                    <span>Download PDF</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                 </motion.div>
                             )}
 
@@ -595,6 +735,21 @@ const VerifyCertificate = () => {
 
             {/* Hidden element for file scanning logic */}
             <div id="file-qr-reader" className="hidden"></div>
+
+            {/* Hidden Certificate for PDF Capture */}
+            <div className="absolute -left-[9999px] top-0 pointer-events-none overflow-hidden">
+                {certData && (
+                    <div className="bg-white">
+                        <Certificate
+                            name={certData.name}
+                            course={certData.course}
+                            grade={certData.grade}
+                            date={certData.date}
+                            id={certId}
+                        />
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
