@@ -55,10 +55,10 @@ const Homepage = () => {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/issuecertificate')}
+                onClick={() => navigate('/dashboard')}
                 className="min-w-[160px] px-8 py-4 glass-btn rounded-full font-semibold text-lg text-white hover:bg-white/10 flex items-center justify-center border border-white/10"
               >
-                Issue Certificate
+                Admin Login
               </motion.button>
             </div>
           </motion.div>
@@ -286,7 +286,7 @@ const Homepage = () => {
               <GraduationCap size={32} className="text-cyan-400" />
             </div>
             <h3 className="text-xl font-bold mb-2">Students</h3>
-            <p className="text-gray-400 text-sm max-w-xs mx-auto">Own your credentials permanently in a digital wallet. Sharable and verifiable anywhere.</p>
+            <p className="text-gray-400 text-sm max-w-xs mx-auto">Access your personalized dashboard to view and manage your blockchain-secured certificates with ease.</p>
           </div>
         </div>
       </section>
@@ -315,10 +315,10 @@ const Homepage = () => {
               Verify Certificate
             </button>
             <button
-              onClick={() => navigate('/issuecertificate')}
+              onClick={() => navigate('/dashboard')}
               className="px-10 py-5 glass-btn rounded-full font-bold text-lg text-white hover:bg-white/10 border border-white/10 min-w-[200px]"
             >
-              Admin Access
+              Admin Login
             </button>
           </div>
         </motion.div>
