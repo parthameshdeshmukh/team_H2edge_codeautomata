@@ -201,7 +201,7 @@ const IssueCertificate = () => {
         course: "Certified Blockchain Associate",
         grade: "A",
         date: new Date().toISOString().split('T')[0],
-        theory: 0, practical: 0, project: 0, assignment: 0, attendance: 0
+        theory: 80, practical: 80, project: 80, assignment: 80, attendance: 80
       };
 
       Object.keys(row).forEach(key => {
@@ -912,11 +912,18 @@ const IssueCertificate = () => {
                               </p>
                             </div>
                           </div>
-                          {res.success && (
-                            <a href={`https://sepolia.etherscan.io/tx/${res.hash}`} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-white/10 rounded-lg text-secondary">
-                              <ExternalLink size={14} />
-                            </a>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {res.success && (
+                              <>
+                                <Link to={`/viewcertificate/${res.id}`} className="p-2 hover:bg-white/10 rounded-lg text-primary transition-colors" title="View Certificate">
+                                  <Eye size={14} />
+                                </Link>
+                                <a href={`https://sepolia.etherscan.io/tx/${res.hash}`} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-white/10 rounded-lg text-secondary">
+                                  <ExternalLink size={14} />
+                                </a>
+                              </>
+                            )}
+                          </div>
                         </div>
                       ))}
                       {currentBulkIndex !== -1 && (

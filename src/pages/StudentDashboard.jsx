@@ -32,6 +32,7 @@ const StudentDashboard = () => {
                     course: details[1],
                     grade: details[2],
                     date: details[3],
+                    performance: details[5] || "",
                     student: details[4]
                 };
             });

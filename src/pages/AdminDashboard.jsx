@@ -68,17 +68,16 @@ const AdminDashboard = () => {
 
                 // Fetch full details for these certificates from the mapping
                 const promises = last5Events.map(async (event) => {
-                    const id = event.args[2]; // Index 2 is 'id' based on ABI
-                    // event.args: [student, course, id, grade]
-                    // But we need name and date from the mapping
+                    const id = event.args[2];
                     const certDetails = await contract.Certificates(id);
                     return {
                         id: id.toString(),
-                        name: certDetails[0], // name is first returned value
-                        course: certDetails[1], // course
-                        grade: certDetails[2], // grade
-                        date: certDetails[3], // date
-                        student: certDetails[4], // student address
+                        name: certDetails[0],
+                        course: certDetails[1],
+                        grade: certDetails[2],
+                        date: certDetails[3],
+                        student: certDetails[4],
+                        performance: certDetails[5] || "",
                         txHash: event.transactionHash
                     };
                 });
